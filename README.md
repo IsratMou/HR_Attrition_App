@@ -4,6 +4,9 @@
 
 This is an end-to-end Machine Learning project that predicts whether an IT employee is likely to leave the company (Attrition). By identifying flight risks early, HR departments can take proactive measures to improve retention, saving the company time and recruitment costs.
 
+🌐 Live Demo
+Click the link below to try the live deployed app:https://hr-attrition-app123.streamlit.app/
+
 ## 🧠 Business Problem
 
 IT companies spend a significant amount of money recruiting and training software engineers. When an employee leaves unexpectedly, it costs the company time and money. This model aims to predict attrition based on employee demographics, job satisfaction, and compensation metrics.
