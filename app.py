@@ -122,7 +122,10 @@ if submitted:
     col1, col2 = st.columns([1, 2])
     with col1:
         st.metric("Attrition Risk Probability", f"{risk_prob:.1%}")
-        if risk_prob >= 0.6:
+        # High-risk cutoff is defined relative to the tuned decision threshold, not a fixed
+        # number — otherwise a hardcoded value can end up below the threshold itself
+        high_risk_cutoff = min(DECISION_THRESHOLD + 0.2, 0.95)
+        if risk_prob >= high_risk_cutoff:
             st.error("🔴 High Risk")
         elif risk_prob >= DECISION_THRESHOLD:
             st.warning("🟡 Medium Risk")
@@ -131,16 +134,12 @@ if submitted:
         st.progress(min(float(risk_prob), 1.0))
 
     # SHAP explanation for this specific employee
+    # LinearExplainer returns a plain 2D array (n_samples, n_features) — no per-class
+    # list/3D handling needed here, unlike TreeExplainer used with the earlier RF model
     emp_transformed = pipeline.named_steps['preprocessor'].transform(emp_df)
     emp_shap = explainer.shap_values(emp_transformed)
-    if isinstance(emp_shap, list):
-        emp_shap_leave = emp_shap[1]
-    elif emp_shap.ndim == 3:
-        emp_shap_leave = emp_shap[:, :, 1]
-    else:
-        emp_shap_leave = emp_shap
 
-    shap_series = pd.Series(emp_shap_leave[0], index=feature_names).sort_values(key=abs, ascending=False)
+    shap_series = pd.Series(emp_shap[0], index=feature_names).sort_values(key=abs, ascending=False)
     top_factors = shap_series.head(6)
 
     with col2:
@@ -168,6 +167,8 @@ if submitted:
         suggestions.append("Reassess travel demands for this role.")
     if any('WorkLifeBalance' in f or 'EnvironmentSatisfaction' in f for f in risk_drivers):
         suggestions.append("Check in on work-life balance and team environment.")
+    if any('JobRole' in f for f in risk_drivers):
+        suggestions.append("Role-specific factors are contributing — consider a role-focused retention conversation.")
 
     if suggestions:
         st.write("**Suggested retention actions**")
