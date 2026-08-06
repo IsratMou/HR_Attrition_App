@@ -6,7 +6,7 @@ An end-to-end machine learning system that predicts an employee's risk of attrit
 
 Rather than a plain Stay/Leave classifier, this project focuses on three things that matter for a real HR tool: a **risk probability** (not just a label), a **decision threshold tuned to the actual business cost** of missing a flight risk, and a **per-employee explanation** of which factors are driving that specific prediction.
 
-🌐 **Live demo:** _update this link after redeploying_
+🌐 **Live demo:** [https://hr-attrition-app123.streamlit.app/]
 
 ## Business Problem
 
