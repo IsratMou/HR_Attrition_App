@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 # ----------------------------
 # Load model artifacts (produced at the end of the notebook)
 # ----------------------------
+
+
 @st.cache_resource
 def load_artifacts():
     pipeline = joblib.load('attrition_pipeline.pkl')
@@ -16,9 +18,11 @@ def load_artifacts():
     metadata = joblib.load('feature_metadata.pkl')
     return pipeline, explainer, feature_names, threshold, metadata
 
+
 pipeline, explainer, feature_names, DECISION_THRESHOLD, metadata = load_artifacts()
 
-st.set_page_config(page_title="Employee Attrition Predictor", page_icon="💼", layout="wide")
+st.set_page_config(page_title="Employee Attrition Predictor",
+                   page_icon="💼", layout="wide")
 st.title("💼 Employee Attrition Risk Predictor")
 st.write("Enter employee details below to estimate attrition risk and see the key drivers behind the prediction.")
 
@@ -32,16 +36,20 @@ with st.form("employee_form"):
     with col1:
         age = st.slider("Age", 18, 60, 30)
         gender = st.selectbox("Gender", ["Male", "Female"])
-        marital_status = st.selectbox("Marital Status", ["Single", "Married", "Divorced"])
+        marital_status = st.selectbox(
+            "Marital Status", ["Single", "Married", "Divorced"])
     with col2:
-        education = st.selectbox("Education Level (1=Below College, 5=Doctorate)", [1, 2, 3, 4, 5], index=2)
+        education = st.selectbox("Education Level (1=Below College, 5=Doctorate)", [
+                                 1, 2, 3, 4, 5], index=2)
         education_field = st.selectbox(
             "Education Field",
-            ["Life Sciences", "Other", "Medical", "Marketing", "Technical Degree", "Human Resources"]
+            ["Life Sciences", "Other", "Medical", "Marketing",
+                "Technical Degree", "Human Resources"]
         )
         distance_from_home = st.slider("Distance From Home (km)", 1, 29, 9)
     with col3:
-        department = st.selectbox("Department", ["Sales", "Research & Development", "Human Resources"])
+        department = st.selectbox(
+            "Department", ["Sales", "Research & Development", "Human Resources"])
         job_role = st.selectbox(
             "Job Role",
             ["Sales Executive", "Research Scientist", "Laboratory Technician", "Manufacturing Director",
@@ -62,7 +70,8 @@ with st.form("employee_form"):
         stock_option_level = st.selectbox("Stock Option Level", [0, 1, 2, 3])
     with col3:
         overtime = st.selectbox("OverTime", ["Yes", "No"])
-        business_travel = st.selectbox("Business Travel", ["Travel_Rarely", "Travel_Frequently", "Non-Travel"])
+        business_travel = st.selectbox(
+            "Business Travel", ["Travel_Rarely", "Travel_Frequently", "Non-Travel"])
         num_companies_worked = st.slider("Number of Companies Worked", 0, 9, 2)
 
     st.subheader("Tenure & History")
@@ -72,21 +81,30 @@ with st.form("employee_form"):
         years_at_company = st.slider("Years At Company", 0, 40, 5)
         years_in_current_role = st.slider("Years In Current Role", 0, 18, 3)
     with col2:
-        years_since_last_promotion = st.slider("Years Since Last Promotion", 0, 15, 1)
-        years_with_curr_manager = st.slider("Years With Current Manager", 0, 17, 3)
-        training_times_last_year = st.slider("Training Times Last Year", 0, 6, 3)
+        years_since_last_promotion = st.slider(
+            "Years Since Last Promotion", 0, 15, 1)
+        years_with_curr_manager = st.slider(
+            "Years With Current Manager", 0, 17, 3)
+        training_times_last_year = st.slider(
+            "Training Times Last Year", 0, 6, 3)
     with col3:
-        performance_rating = st.selectbox("Performance Rating (3=Excellent, 4=Outstanding)", [3, 4])
-        job_involvement = st.selectbox("Job Involvement (1=Low, 4=High)", [1, 2, 3, 4], index=2)
+        performance_rating = st.selectbox(
+            "Performance Rating (3=Excellent, 4=Outstanding)", [3, 4])
+        job_involvement = st.selectbox(
+            "Job Involvement (1=Low, 4=High)", [1, 2, 3, 4], index=2)
 
     st.subheader("Satisfaction")
     col1, col2 = st.columns(2)
     with col1:
-        job_satisfaction = st.selectbox("Job Satisfaction (1=Low, 4=High)", [1, 2, 3, 4], index=2)
-        environment_satisfaction = st.selectbox("Environment Satisfaction (1=Low, 4=High)", [1, 2, 3, 4], index=2)
+        job_satisfaction = st.selectbox(
+            "Job Satisfaction (1=Low, 4=High)", [1, 2, 3, 4], index=2)
+        environment_satisfaction = st.selectbox(
+            "Environment Satisfaction (1=Low, 4=High)", [1, 2, 3, 4], index=2)
     with col2:
-        relationship_satisfaction = st.selectbox("Relationship Satisfaction (1=Low, 4=High)", [1, 2, 3, 4], index=2)
-        work_life_balance = st.selectbox("Work Life Balance (1=Bad, 4=Best)", [1, 2, 3, 4], index=2)
+        relationship_satisfaction = st.selectbox(
+            "Relationship Satisfaction (1=Low, 4=High)", [1, 2, 3, 4], index=2)
+        work_life_balance = st.selectbox(
+            "Work Life Balance (1=Bad, 4=Best)", [1, 2, 3, 4], index=2)
 
     submitted = st.form_submit_button("Predict Attrition Risk")
 
@@ -122,6 +140,7 @@ if submitted:
     col1, col2 = st.columns([1, 2])
     with col1:
         st.metric("Attrition Risk Probability", f"{risk_prob:.1%}")
+        st.caption(f"Threshold for flagging risk: {DECISION_THRESHOLD:.0%}")
         # High-risk cutoff is defined relative to the tuned decision threshold, not a fixed
         # number — otherwise a hardcoded value can end up below the threshold itself
         high_risk_cutoff = min(DECISION_THRESHOLD + 0.2, 0.95)
@@ -139,36 +158,45 @@ if submitted:
     emp_transformed = pipeline.named_steps['preprocessor'].transform(emp_df)
     emp_shap = explainer.shap_values(emp_transformed)
 
-    shap_series = pd.Series(emp_shap[0], index=feature_names).sort_values(key=abs, ascending=False)
+    shap_series = pd.Series(emp_shap[0], index=feature_names).sort_values(
+        key=abs, ascending=False)
     top_factors = shap_series.head(6)
 
     with col2:
         st.write("**Top factors behind this prediction**")
         fig, ax = plt.subplots(figsize=(6, 3.5))
-        colors = ['#d62728' if v > 0 else '#1f77b4' for v in top_factors.values[::-1]]
-        ax.barh(top_factors.index[::-1], top_factors.values[::-1], color=colors)
+        colors = ['#d62728' if v >
+                  0 else '#1f77b4' for v in top_factors.values[::-1]]
+        ax.barh(top_factors.index[::-1],
+                top_factors.values[::-1], color=colors)
         ax.set_xlabel("SHAP value (pushes toward Leave \u2192)")
         st.pyplot(fig)
-        st.caption("Red = pushes toward higher risk \u00b7 Blue = pushes toward lower risk")
+        st.caption(
+            "Red = pushes toward higher risk \u00b7 Blue = pushes toward lower risk")
 
     # Factor-driven retention suggestions — only shown when they're actually top risk drivers
     # for THIS employee, not a static generic list
     risk_drivers = top_factors[top_factors > 0].index.tolist()
     suggestions = []
     if any('OverTime' in f for f in risk_drivers):
-        suggestions.append("Review workload — this employee is working overtime, a strong attrition driver.")
+        suggestions.append(
+            "Review workload — this employee is working overtime, a strong attrition driver.")
     if 'JobSatisfaction' in risk_drivers:
-        suggestions.append("Schedule a check-in on job satisfaction and role fit.")
+        suggestions.append(
+            "Schedule a check-in on job satisfaction and role fit.")
     if 'MonthlyIncome' in risk_drivers:
         suggestions.append("Review compensation relative to role and market.")
     if 'StockOptionLevel' in risk_drivers:
-        suggestions.append("Consider offering or increasing stock option level.")
+        suggestions.append(
+            "Consider offering or increasing stock option level.")
     if any('BusinessTravel' in f for f in risk_drivers):
         suggestions.append("Reassess travel demands for this role.")
     if any('WorkLifeBalance' in f or 'EnvironmentSatisfaction' in f for f in risk_drivers):
-        suggestions.append("Check in on work-life balance and team environment.")
+        suggestions.append(
+            "Check in on work-life balance and team environment.")
     if any('JobRole' in f for f in risk_drivers):
-        suggestions.append("Role-specific factors are contributing — consider a role-focused retention conversation.")
+        suggestions.append(
+            "Role-specific factors are contributing — consider a role-focused retention conversation.")
 
     if suggestions:
         st.write("**Suggested retention actions**")
