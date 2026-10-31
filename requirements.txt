@@ -1,8 +1,17 @@
-streamlit
-pandas
-numpy
-scikit-learn
-imbalanced-learn
-joblib
-shap
-matplotlib
+# HR Attrition App — Pinned Dependencies (Python 3.11)
+# Streamlit Cloud: set Python version to 3.11 in Settings > Advanced Settings.
+# Python 3.14 (default as of late 2026) does NOT have wheels for
+# numba / llvmlite, which shap depends on -> shap install fails -> the
+# shap_explainer.pkl unpickling raises ModuleNotFoundError at runtime.
+
+streamlit==1.39.0
+pandas==2.2.3
+numpy==1.26.4
+scipy==1.13.1
+scikit-learn==1.5.2
+imbalanced-learn==0.12.3
+joblib==1.4.2
+shap==0.46.0
+matplotlib==3.9.2
+numba==0.60.0
+llvmlite==0.43.0

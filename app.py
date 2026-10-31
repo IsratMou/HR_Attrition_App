@@ -3,28 +3,67 @@ import pandas as pd
 import numpy as np
 import joblib
 import matplotlib.pyplot as plt
+import traceback
 
 # ----------------------------
-# Load model artifacts (produced at the end of the notebook)
+# Load model artifacts (produced at the end of the notebook).
+# Wrapped in try/except so the Streamlit app surfaces a readable error
+# instead of a redacted "ModuleNotFoundError" page on Streamlit Cloud.
 # ----------------------------
-
 
 @st.cache_resource
 def load_artifacts():
     pipeline = joblib.load('attrition_pipeline.pkl')
-    explainer = joblib.load('shap_explainer.pkl')
     feature_names = joblib.load('feature_names.pkl')
     threshold = joblib.load('decision_threshold.pkl')
     metadata = joblib.load('feature_metadata.pkl')
-    return pipeline, explainer, feature_names, threshold, metadata
+
+    # shap_explainer.pkl unpickles a shap.explainers._linear.LinearExplainer
+    # object. If the shap package (or its numba/llvmlite deps) is not
+    # installed in the Streamlit Cloud environment, joblib.load raises
+    # ModuleNotFoundError. We catch it here so the app can still serve
+    # predictions without SHAP explanations.
+    explainer = None
+    shap_error = None
+    try:
+        explainer = joblib.load('shap_explainer.pkl')
+    except ModuleNotFoundError as e:
+        shap_error = (
+            f"SHAP explainer could not be loaded: {e.name}. "
+            "Predictions will still work, but per-employee SHAP explanations "
+            "are disabled. Fix: pin Python 3.11 and add numba/llvmlite/shap "
+            "to requirements.txt."
+        )
+    except Exception as e:
+        shap_error = f"SHAP explainer could not be loaded: {e}"
+
+    return pipeline, explainer, feature_names, threshold, metadata, shap_error
 
 
-pipeline, explainer, feature_names, DECISION_THRESHOLD, metadata = load_artifacts()
+try:
+    pipeline, explainer, feature_names, DECISION_THRESHOLD, metadata, shap_error = \
+        load_artifacts()
+except Exception:
+    st.set_page_config(page_title="Employee Attrition Predictor",
+                       page_icon="💼", layout="wide")
+    st.title("💼 Employee Attrition Risk Predictor")
+    st.error(
+        "Failed to load model artifacts. See the error below — this is "
+        "almost always a Python version / missing dependency issue on "
+        "Streamlit Cloud (Python 3.14 lacks wheels for numba/llvmlite, "
+        "which shap depends on)."
+    )
+    st.code(traceback.format_exc())
+    st.stop()
+
 
 st.set_page_config(page_title="Employee Attrition Predictor",
                    page_icon="💼", layout="wide")
 st.title("💼 Employee Attrition Risk Predictor")
 st.write("Enter employee details below to estimate attrition risk and see the key drivers behind the prediction.")
+
+if shap_error:
+    st.warning(shap_error)
 
 # ----------------------------
 # Input form, organized by section (real inputs for every model feature)
@@ -128,10 +167,7 @@ if submitted:
         'YearsWithCurrManager': years_with_curr_manager
     }
 
-    # Match training column order exactly — the pipeline's ColumnTransformer expects this
     emp_df = pd.DataFrame([input_data])[metadata['all_raw_cols']]
-
-    # Predict probability using the full pipeline (all preprocessing happens inside it)
     risk_prob = pipeline.predict_proba(emp_df)[0, 1]
 
     st.divider()
@@ -141,8 +177,6 @@ if submitted:
     with col1:
         st.metric("Attrition Risk Probability", f"{risk_prob:.1%}")
         st.caption(f"Threshold for flagging risk: {DECISION_THRESHOLD:.0%}")
-        # High-risk cutoff is defined relative to the tuned decision threshold, not a fixed
-        # number — otherwise a hardcoded value can end up below the threshold itself
         high_risk_cutoff = min(DECISION_THRESHOLD + 0.2, 0.95)
         if risk_prob >= high_risk_cutoff:
             st.error("🔴 High Risk")
@@ -152,56 +186,60 @@ if submitted:
             st.success("🟢 Low Risk")
         st.progress(min(float(risk_prob), 1.0))
 
-    # SHAP explanation for this specific employee
-    # LinearExplainer returns a plain 2D array (n_samples, n_features) — no per-class
-    # list/3D handling needed here, unlike TreeExplainer used with the earlier RF model
-    emp_transformed = pipeline.named_steps['preprocessor'].transform(emp_df)
-    emp_shap = explainer.shap_values(emp_transformed)
+    # SHAP explanation is only shown if the explainer loaded successfully.
+    if explainer is not None:
+        emp_transformed = pipeline.named_steps['preprocessor'].transform(emp_df)
+        emp_shap = explainer.shap_values(emp_transformed)
 
-    shap_series = pd.Series(emp_shap[0], index=feature_names).sort_values(
-        key=abs, ascending=False)
-    top_factors = shap_series.head(6)
+        shap_series = pd.Series(emp_shap[0], index=feature_names).sort_values(
+            key=abs, ascending=False)
+        top_factors = shap_series.head(6)
 
-    with col2:
-        st.write("**Top factors behind this prediction**")
-        fig, ax = plt.subplots(figsize=(6, 3.5))
-        colors = ['#d62728' if v >
-                  0 else '#1f77b4' for v in top_factors.values[::-1]]
-        ax.barh(top_factors.index[::-1],
-                top_factors.values[::-1], color=colors)
-        ax.set_xlabel("SHAP value (pushes toward Leave \u2192)")
-        st.pyplot(fig)
-        st.caption(
-            "Red = pushes toward higher risk \u00b7 Blue = pushes toward lower risk")
+        with col2:
+            st.write("**Top factors behind this prediction**")
+            fig, ax = plt.subplots(figsize=(6, 3.5))
+            colors = ['#d62728' if v >
+                      0 else '#1f77b4' for v in top_factors.values[::-1]]
+            ax.barh(top_factors.index[::-1],
+                    top_factors.values[::-1], color=colors)
+            ax.set_xlabel("SHAP value (pushes toward Leave \u2192)")
+            st.pyplot(fig)
+            st.caption(
+                "Red = pushes toward higher risk \u00b7 Blue = pushes toward lower risk")
 
-    # Factor-driven retention suggestions — only shown when they're actually top risk drivers
-    # for THIS employee, not a static generic list
-    risk_drivers = top_factors[top_factors > 0].index.tolist()
-    suggestions = []
-    if any('OverTime' in f for f in risk_drivers):
-        suggestions.append(
-            "Review workload — this employee is working overtime, a strong attrition driver.")
-    if 'JobSatisfaction' in risk_drivers:
-        suggestions.append(
-            "Schedule a check-in on job satisfaction and role fit.")
-    if 'MonthlyIncome' in risk_drivers:
-        suggestions.append("Review compensation relative to role and market.")
-    if 'StockOptionLevel' in risk_drivers:
-        suggestions.append(
-            "Consider offering or increasing stock option level.")
-    if any('BusinessTravel' in f for f in risk_drivers):
-        suggestions.append("Reassess travel demands for this role.")
-    if any('WorkLifeBalance' in f or 'EnvironmentSatisfaction' in f for f in risk_drivers):
-        suggestions.append(
-            "Check in on work-life balance and team environment.")
-    if any('JobRole' in f for f in risk_drivers):
-        suggestions.append(
-            "Role-specific factors are contributing — consider a role-focused retention conversation.")
+        risk_drivers = top_factors[top_factors > 0].index.tolist()
+        suggestions = []
+        if any('OverTime' in f for f in risk_drivers):
+            suggestions.append(
+                "Review workload — this employee is working overtime, a strong attrition driver.")
+        if 'JobSatisfaction' in risk_drivers:
+            suggestions.append(
+                "Schedule a check-in on job satisfaction and role fit.")
+        if 'MonthlyIncome' in risk_drivers:
+            suggestions.append("Review compensation relative to role and market.")
+        if 'StockOptionLevel' in risk_drivers:
+            suggestions.append(
+                "Consider offering or increasing stock option level.")
+        if any('BusinessTravel' in f for f in risk_drivers):
+            suggestions.append("Reassess travel demands for this role.")
+        if any('WorkLifeBalance' in f or 'EnvironmentSatisfaction' in f for f in risk_drivers):
+            suggestions.append(
+                "Check in on work-life balance and team environment.")
+        if any('JobRole' in f for f in risk_drivers):
+            suggestions.append(
+                "Role-specific factors are contributing — consider a role-focused retention conversation.")
 
-    if suggestions:
-        st.write("**Suggested retention actions**")
-        for s in suggestions:
-            st.write(f"- {s}")
+        if suggestions:
+            st.write("**Suggested retention actions**")
+            for s in suggestions:
+                st.write(f"- {s}")
+    else:
+        with col2:
+            st.info(
+                "Per-employee SHAP explanation is unavailable because the "
+                "SHAP explainer artifact could not be loaded in this "
+                "environment. The risk probability above is still valid."
+            )
 
     st.caption(
         f"Decision threshold: {DECISION_THRESHOLD:.2f} (tuned on held-out test data to maximize F1 for the "
