@@ -1,0 +1,16 @@
+# Streamlit Cloud app configuration.
+# Note: Streamlit Community Cloud reads the Python version from the app's
+# Settings panel (Manage app > Settings > Advanced settings > Python version),
+# NOT from this file. Set Python to 3.11 there.
+# This file only controls Streamlit runtime behaviour.
+
+[server]
+maxUploadSize = 200
+enableCORS = false
+enableXsrfProtection = true
+
+[runner]
+fastReruns = true
+
+[client]
+showErrorDetails = true
